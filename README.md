@@ -14,4 +14,10 @@ In the data set, there 1599 different wine as row data and 12 features as column
 
 ![Imgur Image](https://imgur.com/5Ea5h9f.jpg)
 
+# Classification tree
 
+![Imgur Image](https://https://imgur.com/6mPKwm0.jpg)
+
+# Pruning
+
+![Imgur Image](https://imgur.com/lFiO7ut.jpg)
