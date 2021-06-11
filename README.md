@@ -10,14 +10,15 @@ In this dataset there are specifically red wine variants of Poteguese "Vinho Ver
 
 In the data set, there 1599 different wine as row data and 12 features as columns. Furthermore, there is no nun value to deal with it and all values are numeric means that input values are float and only output value is integer.
 
-# Decision tree  
+# Chapters
 
-![Imgur Image](https://imgur.com/5Ea5h9f.jpg)
+- Classification Tree
+- Pruning
+- confusionMatrix
+- Bagging and Random Forests
+- Boosting
+- Logistic Regression
+- Optimum Cutoff
+- Receiver Operating Characteristic Curve (ROC)
+- Multicollinearity
 
-# Classification tree
-
-![Imgur Image](https://https://imgur.com/6mPKwm0.jpg)
-
-# Pruning
-
-![Imgur Image](https://imgur.com/lFiO7ut.jpg)
