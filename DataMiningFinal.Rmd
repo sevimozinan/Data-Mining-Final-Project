@@ -1,0 +1,922 @@
+---
+title: "Veri Madenciliği Final Ödevi"
+author: "Sevim Özinan"
+date: "27 01 2021"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r message=FALSE, warning=FALSE, include=FALSE}
+getwd()
+setwd("C:/Users/DELL/Desktop/datamining_proje")
+data<-read.csv("winequalityN.csv",header = T)
+```
+
+```{r message=FALSE, warning=FALSE, include=FALSE}
+library(tidyverse)
+library(corrplot)
+library(gridExtra)
+library(GGally)
+library(randomForest)
+library(tree)
+library(rpart)
+library(caret)
+library(party)
+```
+
+#SORU 1
+
+**Veri Seti Bilgileri**
+
+Bu veri seti portekiz "Vinho Verde" şarabının kırmızı ve beyaz çeşitleri ile ilgilidir.
+
+**Bağımsız Değişkenler**
+
+fixed acidity : sabit asitlik
+
+volatile acidity : uçucu asitlik 
+
+citric acid : sitrik asit
+
+residual sugar : artık şeker 
+
+chlorides : klorürler 
+
+free sulfur dioxide : serbest kükürt dioksit
+
+total sulfur dioxide : toplam kükürt dioksit
+
+density : yoğunluk 
+
+pH : pH
+
+sulphates : sülfatlar 
+
+alcohol : alkol 
+
+**Bağımlı Değişken**
+
+quality : kalite (0 ile 10 puan arası)
+
+#**Classification Tree**
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+head(data)
+```
+
+
+Verideki eksik gözlemlere bakalım, varsa temizleyelim.
+
+```{r message=FALSE, warning=FALSE}
+sum(is.na(data))
+```
+
+```{r message=FALSE, warning=FALSE}
+for(i in 1:ncol(data)){
+    data[is.na(data[,i]), i] <- mean(data[,i], na.rm = TRUE)
+}
+sum(is.na(data))
+```
+
+```{r}
+str(data)
+```
+
+Yanıt değişkenimiz olan quality değişkenini binary hale getirmek için 6dan az ve çok olmak üzere, low ve high olarak iki kategoriye ayıralım ve qualityFactor olarak isimlendirelim.
+
+```{r message=FALSE, warning=FALSE}
+qualityFactor <- ifelse(data$quality >= 6, "high", "low")
+data <- data.frame(data, qualityFactor)
+table(data$qualityFactor)
+```
+
+Şimdi de analizlerde gerekli olmadığından quality ve type değişkenlerini veriden çıkartalım. 
+
+```{r message=FALSE, warning=FALSE}
+data <- data[, -13]
+data <- data[, -1]
+```
+
+Test ve train kümemizi oluşturalım. 
+```{r message=FALSE, warning=FALSE}
+index <- sample(2, nrow(data), replace=TRUE, prob = c(0.80, 0.20))
+train <- data[index==1, ]
+test <- data[index==2, ]
+
+train$qualityFactor = as.factor(train$qualityFactor)
+test$qualityFactor = as.factor(test$qualityFactor)
+
+```
+
+Sınıflandırma ve regresyon ağaçları rpart paketi aracılığıyla oluşturulabilir. Biz de bu paketi kullanarak oluşturalım ve tahmin değerini bulup karar ağacını çizelim. 
+```{r message=FALSE, warning=FALSE}
+set.seed(1234)
+## Rpart modelini oluşturmak, değeri tahmin etmek ve karar ağacını çizmek: 
+library(rpart.plot)
+control <- rpart.control(minsplit = 5L, maxdepth = 5L, minbucket = 5, cp = 0.002, maxsurrogate = 4)
+rPartModel <- rpart(qualityFactor~., train, method = "class", control = control)
+predict_rpart <- predict(rPartModel, test[, -13], type = "class")
+prp(rPartModel, type=2, extra=3, tweak=0.8, main = "The Quality of Wine", compress=TRUE)
+```
+
+Tree komutu ile modeli kursaydık, 
+
+```{r message=FALSE, warning=FALSE}
+set.seed(1234)
+tree.model1=tree(qualityFactor~., data=train)
+summary(tree.model1)
+```
+
+Yukarıdaki çıktı bize bu ağaçla ilgili birçok bilgi vermektedir. Ağacın inşaasında kullanılan değişkenleri, terminal nod sayısı, Default olarak kullanılan deviance ölçütü değeri ve yanlış sınıflandırma oranını görebiliriz.
+
+
+Bu şekilde oluşturulan bir ağacın test verisi üzerindeki performansını incelersek; 
+
+```{r message=FALSE, warning=FALSE}
+set.seed(1234)
+confusionMatrix(predict_rpart, test$qualityFactor)
+```
+
+Görüldüğü gibi modelin test seti üzerindeki accuracy'si (doğruluk oranı) 0.7261, Sensitivity ise 0.8289
+
+Şimdi budama (pruning) yapalım. Böylelikle model tahminlerinin varyansını düşüreceğiz ve daha az komplex bir ağaçla çalışabileceğiz. 
+
+
+```{r message=FALSE, warning=FALSE}
+set.seed(1234)
+cv.data=cv.tree(tree.model1,FUN=prune.misclass)
+cv.data
+plot(cv.data)
+```
+
+
+Grafikten görüldüğü üzere misclassification'ın en düşük değeri size 4 de elde edilmiştir. (4 ve 5 denenmiş olup en yüksek accuracy size = 4 de elde edilmiştir.)
+
+Budanan ağacın yapısı ve bu şekilde oluşturulan bir ağacın test verisi üzerindeki performansını inceleyelim;
+```{r message=FALSE, warning=FALSE}
+set.seed(1234)
+prune.data=prune.misclass(tree.model1,best=4)
+plot(prune.data);text(prune.data,pretty=0)
+prune.data.pred=predict(prune.data,test,type="class")
+
+confusionMatrix(prune.data.pred, test$qualityFactor)
+```
+
+
+
+Doğru sınıflandırma yüzdesi 0.7253 olup çok az düşmüştür ancak yorumlanması daha kolay bir ağacımız olmuştur. Ayrıca sensitivity de 0.8568 olup çok az yükselmiştir.   
+
+#**Bagging and Random Forests**
+
+**Bagging**
+
+Bagging için ilk olarak randomForest kütüphanesini indirelim ve training set üzerinde Bagging sınıﬂandırıcımızı kuralım.
+
+Eğer mtray=p(değişken sayısı) alırsak bagging yapmış oluruz.
+
+Default bootstrap sample sayısı 500’dür. İlk olarak default taki gibi çalıştıralım.
+
+```{r message=FALSE, warning=FALSE}
+library(randomForest)
+set.seed(1234)
+Bagging.model1=randomForest(qualityFactor~., data=train, mtry=12, importance=TRUE)
+Bagging.model1
+```
+
+Aşağıda Bagging modeline göre değişkenlerin, iki farklı ölçüte göre önemlilik dereceleri sıralanmıştır.
+```{r message=FALSE, warning=FALSE}
+varImpPlot(Bagging.model1)
+```
+
+Bu modelin test verisi üzerindeki performansını inceleyelim;
+
+```{r message=FALSE, warning=FALSE}
+set.seed(1234)
+bagg.classTest <-  predict(Bagging.model1, 
+                         newdata = test,
+                          type="class")
+
+confusionMatrix(bagg.classTest, test$qualityFactor)
+```
+
+Test veri seti üzerindeki doğru sınıflandırma oranı %80
+
+
+Default bootstrap sample sayısı belirlemek için aşağıdaki grafiğe bakıldığı zaman, yeşil çizgiden görüldüğü gibi 150 bootstrap sample bile yeterli gözükmektedir.MSE değerleri 150 den sonra çok büyük bir değişkenlik göstermemektedir.  Mavi ve kırmızı çizgiler class errorlerini vermektedir.
+
+```{r message=FALSE, warning=FALSE}
+plot(Bagging.model1)
+```
+
+Şimdi 500 ağaçlı model yerine 150 ağaçlı model kurarsak ne olur inceleyelim.
+
+```{r message=FALSE, warning=FALSE}
+set.seed(1234)
+
+Bagging.model2=randomForest(qualityFactor~., data=train, mtry=12, ntree=150, importance=TRUE)
+Bagging.model2
+
+```
+
+Bu modelin test verisi üzerindeki performansını inceleyelim;
+
+```{r message=FALSE, warning=FALSE}
+set.seed(1234)
+bagg.classTest2 <-  predict(Bagging.model2, 
+                         newdata = test,
+                          type="class")
+
+confusionMatrix(bagg.classTest2, test$qualityFactor)
+
+```
+
+Test veri seti üzerindeki doğru sınıflandırma oranı %81. Görüldüğü üzere 150 ağaçla daha yüksek bir doğru sınıflandırma sonucu elde ettik.Sensitivity değeri de aynı kalmış sayılabilir. 
+
+Şimdi farklı mtray değerlerini deneyelim. Bunun için r paketinde olan "rf" metodunu kullanalım. 
+
+```{r message=FALSE, warning=FALSE}
+cvcontrol <- trainControl(method="repeatedcv", number = 10,
+                          allowParallel=TRUE)
+train.rf <- train(as.factor(qualityFactor) ~ ., 
+                  data=train,
+                  method="rf",
+                  trControl=cvcontrol,
+                  #tuneLength = 3,
+                  importance=TRUE)
+train.rf
+
+```
+
+
+Görüldüğü üzere en yüksek Accuracy değeri mtry = 2 alındığında elde edilmiştir.   
+
+
+Aşağıda Random Forest modeline göre değişkenlerin, mtry = 2 için iki farklı ölçüte göre önemlilik dereceleri sıralanmıştır
+```{r message=FALSE, warning=FALSE}
+rf.data=randomForest(qualityFactor~.,data=train,mtry=2,importance=TRUE)
+
+varImpPlot(rf.data)
+```
+
+
+Bu modelin test verisi üzerindeki performansını inceleyelim;
+
+```{r message=FALSE, warning=FALSE}
+set.seed(1234)
+rf.classTest <-  predict(train.rf, 
+                         newdata = test,
+                          type="raw")
+
+confusionMatrix(test$qualityFactor,rf.classTest)
+
+```
+
+
+
+Test veri seti üzerindeki doğru sınıflandırma oranı %81 çıkmıştır.
+
+
+# **Boosting** 
+
+Boosting de bagging ve random forest gibi tahmin performansını arttırmaya yönelik bir yaklaşımdır. Onlardan farklı olarak boosting iterative bir yaklaşımdır ve her adımında bir önceki adımdaki performansı geliştirmeye çalışır.
+
+Boosting modelini oluşturalım;
+
+```{r message=FALSE, warning=FALSE}
+library(gbm)
+set.seed(1234)
+boost.data=gbm(qualityFactor~.,data=train,distribution="gaussian",n.trees=5000,interaction.depth=4)
+summary(boost.data)
+```
+
+
+
+Boosting modeline göre değişkenlerin önemlilik dereceleri yukarıda sıralanmıştır. alcohol değişkeni kalite belirlenmesinde Boosting modelinde en önemli değişken olarak görülür. Daha sonrasında total.sulfur.dioxide değişkeni en önemli değişkendir.
+
+
+Bu modelin test verisi üzerindeki performansını inceleyelim;
+
+```{r message=FALSE, warning=TRUE}
+library(gbm)
+yhat.boost=predict(boost.data,newdata=test,n.trees=5000)
+mean((yhat.boost-as.numeric(as.factor(test$qualityFactor)))^2)
+```
+
+
+#**Logistic Regression** 
+
+Lojistik regresyon, ikili(binary) 1 veya 0 olarak kodlanmış verileri içerir. Bunun için test ve train kümelerimizi yeniden düzenleyelim ve lojistik regresyon modelini kuralım;
+
+```{r message=FALSE, warning=FALSE}
+
+train$qualityFactor=ifelse(train$qualityFactor=="high",0,1)
+train$qualityFactor=factor(train$qualityFactor)
+
+test$qualityFactor=ifelse(test$qualityFactor=="high",0,1)
+test$qualityFactor=factor(test$qualityFactor)
+
+lojistik.model <- glm(qualityFactor~ ., data=train, family=binomial)
+summary(lojistik.model)
+```
+
+
+Bu modelin train verisi üzerindeki performansını inceleyelim;
+
+```{r message=FALSE, warning=FALSE}
+library(InformationValue)
+set.seed(1234)
+predictions<-predict(lojistik.model,type="response")
+predtrain<-ifelse(predictions>0.5,1,0)
+table(predtrain,train$qualityFactor)
+misClassError(train$qualityFactor, predictions, threshold = 0.5)
+```
+
+Görüldüğü üzere training set üzerindeki sınıflandırma performansı çok iyi değildir. Yanlış sınıflandırma oran 0.26 bulunmuştur.
+
+
+Şimdi test verisi için tahminlerimizi elde edelim.
+
+```{r message=FALSE, warning=FALSE}
+predicted <- predict(lojistik.model, test, type="response")  # predicted scores
+pred<-ifelse(predicted>0.5,1,0)
+table(pred,test$qualityFactor)
+misClassError(test$qualityFactor, predicted , threshold = 0.5)
+```
+
+
+Görüldüğü üzere test set üzerindeki yanlış sınıflandırma oranı 0.2466 bulunmuştur.
+
+**Optimum Cutoff**
+
+Optimum kesim noktasının bulunması;
+
+```{r message=FALSE, warning=FALSE}
+library(InformationValue)
+optCutOff <- optimalCutoff(train$qualityFactor, predictions)[1] 
+optCutOff 
+```
+
+
+
+Ancak görüldüğü üzere training set için elde edilen optimum cutoff değeri 0.5’ten çok farklı değildir.Aşağıdaki yaklaşımla sensivity ve specifity belli bir oranda tutan cutoff değeri belirlenebilir. İki eğrinin kesim noktası;
+
+
+```{r message=FALSE, warning=FALSE}
+library(ROCR)
+predd <- prediction(predictions, train$qualityFactor)
+plot(unlist(performance(predd, "sens")@x.values), unlist(performance(predd, "sens")@y.values), 
+     type="l", lwd=2, ylab="Specificity", xlab="Cutoff")
+par(new=TRUE)
+plot(unlist(performance(predd, "spec")@x.values), unlist(performance(predd, "spec")@y.values), 
+     type="l", lwd=2, col='red', ylab="", xlab="")
+axis(4, at=seq(0,1,0.2))
+mtext("Specificity",side=4, padj=-2, col='red')
+
+
+```
+
+
+
+
+Görüldüğü gibi bu değerde 0.5’ten çok farklı değildir.
+
+
+**Receiver Operating Characteristic Curve (ROC)**
+
+```{r message=FALSE, warning=FALSE}
+plotROC(test$qualityFactor, predicted)
+```
+
+Eğri altında kalan alan ne kadar büyükse o kadar iyidir kurduğumuz model için 0.80 bulunmuştur. 
+
+**Concordance**
+
+Genel olarak concordance 1 olarak etiketli olan gözlemlere karşılık tahmin edilen olasılık değerlerinin sıfır olarak kodlu olanlara karşılık tahmin edilenlerin hepsinden yüksek olarak tahmin edilenlerinin oranını verir. Bu oran nekadar yüksek ise model o kadar iyi ayrıştırma yapıyor demektir.
+
+```{r message=FALSE, warning=FALSE}
+Concordance(test$qualityFactor, predicted)$Concordance
+
+```
+
+
+Concodance oranı 0.80 bulunmuştur. Bu da modelin iyi ayrıştırma yaptığını gösterir.
+
+
+**Multicollinearity**
+
+Modelde multicollinearity söz konusu ise bu modelin tahmin performansını etkiler. Bunu da vif komutu ile inceleyebiliriz.
+
+```{r message=FALSE, warning=FALSE}
+library(car)
+vif(lojistik.model)
+```
+
+
+**Sonuç olarak, 150 Bootstrap Sample ile kurduğumuz modelde en yüksek doğru sınıflandırma oranını elde ettik.** 
+
+#SORU 2
+
+```{r message=FALSE, warning=FALSE, include=FALSE}
+dt <- read.csv("C:/Users/DELL/Desktop/YEDEKLER/KULLANICI/Desktop/bilgisayar/Concrete.csv")
+
+```
+
+
+Asagida gordugumuz veri setimiz “betonun basinc dayanimiyla” ilgilidir. Bu kavram ozellikle muhendislikte cok onemlidir cunku bir baska tanimla betonda olusan yuk miktarinin sebep olabilecegi kirilmalara ve seklen farklilasmaya karsi gosterdigi direnctir.
+
+Bagimsiz degiskenler:
+
+Cement: Cimento
+
+Blast Furnace Slag: Yuksek firin curufu(yuksek firinlarda demir uretimi esnasinda aciga cikan bir yan urundur)
+
+Fly Ash: Ucucu kul
+
+Water: Su
+
+Superplasticizer: Super plastiklestirici
+
+Coarse Aggregate: Kaba agrega
+
+Fine Aggregate: Ince agrega
+
+Age: Gun (1 ~ 365)
+
+Bagimli degisken: Concrete compressive strength(csMPa): Beton basinc dayanimi(sürekli)
+
+
+
+```{r}
+head(dt)
+str(dt)
+```
+
+# **Bagging and Random Forests**
+
+Bu veride 1030 tane gözlem vardır. Bunların 900 tanesini training set için kullanalım.
+
+```{r message=FALSE, warning=FALSE}
+train = sample(1:nrow(dt),900)
+```
+
+Eğer mtray=p alırsak bagging yapmış oluruz. Default bootstrap sample sayısı 500 dür. İlk olarak default taki gibi çalıştıralım.
+
+
+```{r message=FALSE, warning=FALSE}
+set.seed(1234)
+bag.dt=randomForest(csMPa~.,data=dt,subset=train,mtry=8,importance=TRUE)
+bag.dt
+yhat.bag = predict(bag.dt,newdata=dt[-train,])
+
+dt.test=dt[-train,"csMPa"]
+
+plot(yhat.bag, dt.test)
+abline(0,1)
+```
+
+
+
+
+Görüldüğü gibi MSE değeri 23.12392 bulunmuştur ve toplam varyansın %91.6 sı açıklanmaktadır. Bu MSE ve Explained Variance değerleri out of bag error değerleri kullanılarak elde edilmiştir.
+
+
+
+```{r message=FALSE, warning=FALSE}
+mean((yhat.bag-dt.test)^2)
+
+```
+
+
+Bu model kullanılarak test verisi için elde edilen MSE değeri 24.6309 olarak elde edilmiştir.
+
+Şimdi outof bag error grafiğini çizdirelim.
+
+```{r message=FALSE, warning=FALSE}
+plot(bag.dt)
+
+```
+
+
+Görüldüğü gibi 100 bootstrap sample bile yeterli gözükmektedir. MSE değerleri 100 den sonra büyük bir değişkenlik göstermemektedir. İlk 150 değere bakıcak olursak bunu görebiliriz.
+
+
+```{r message=FALSE, warning=FALSE}
+head(bag.dt$mse,150)
+```
+
+Şimdi 500 ağaçlı model yerine 100 ağaçlı model kurarsak ne olur inceleyelim.
+
+
+```{r message=FALSE, warning=FALSE}
+bag.dt=randomForest(csMPa~.,data=dt,subset=train,mtry=8,ntree=100)
+yhat.bag = predict(bag.dt,newdata=dt[-train,])
+mean((yhat.bag-dt.test)^2)
+```
+
+
+Görüldüğü üzere 100 ağaçla da yaklaşık aynı sonucu elde ettik. Şimdi mtry=4 alarak randomforest yapalım.
+
+```{r message=FALSE, warning=FALSE}
+set.seed(1234)
+rf.dt=randomForest(csMPa~.,data=dt,subset=train,mtry=4,importance=TRUE)
+yhat.rf = predict(rf.dt,newdata=dt[-train,])
+mean((yhat.rf-dt.test)^2)
+```
+
+Şimdi farklı mtray değerleri için outof bag mse değerleri ile test verisi mse değerlerini karşılaştıralım. 
+
+
+```{r message=FALSE, warning=FALSE}
+oob.err<-double(8)
+test.err<-double(8)
+
+#mtry is no of Variables randomly chosen at each split
+for(mtry in 1:8) 
+{
+  rf=randomForest(csMPa ~ . , data = dt , subset = train,mtry=mtry,ntree=500) 
+  oob.err[mtry] = rf$mse[500] #Error of all Trees fitted
+  
+  pred<-predict(rf,dt[-train,]) #Predictions on Test Set for each Tree
+  test.err[mtry]= with(dt[-train,], mean( (csMPa - pred)^2)) #Mean Squared Test Error
+  
+  cat(mtry," ")
+  
+}
+```
+
+
+
+```{r message=FALSE, warning=FALSE}
+matplot(1:mtry , cbind(oob.err,test.err), pch=19 , col=c("red","blue"),type="b",ylab="Mean Squared Error",xlab="Number of Predictors Considered at each Split")
+legend("topright",legend=c("Out of Bag Error","Test Error"),pch=19, col=c("red","blue"))
+```
+
+Bu grafikten mtray=8 daha uygun gözüküyor. mtray=8 için hesaplanan test verisi mse değeri 
+
+```{r message=FALSE, warning=FALSE}
+test.err[8]
+```
+
+
+Şimdi değişkenlerin önemliliklerini inceleyelim.
+
+
+```{r message=FALSE, warning=FALSE}
+importance(rf.dt)
+varImpPlot(rf.dt)
+```
+
+
+
+
+Burada iki farklı ölçüte göre değişkenlerin önemlilik dereceleri sıralanmıştır. Görüldüğü üzere her iki ölçüte görede age ve cement açık ara daha önemli değişkenlerdir.
+
+# **Boosting**
+
+
+```{r message=FALSE, warning=FALSE}
+library(gbm)
+set.seed(1234)
+boost.dt=gbm(csMPa~.,data=dt[train,],distribution="gaussian",n.trees=5000,interaction.depth=4)
+summary(boost.dt)
+```
+
+
+
+
+Görüldüğü üzere age, cement ve water en önemli üç değişkenlerdir. 
+
+Şimdi modelin test verisi üzerindeki performansını inceleyelim.
+
+```{r message=FALSE, warning=FALSE}
+set.seed(1234)
+yhat.boost=predict(boost.dt,newdata=dt[-train,],n.trees=5000)
+mean((yhat.boost-dt.test)^2)
+```
+
+modelin test verisi üzerindeki performansı 20.83117 bulunmuştur. 
+
+**Ve görüldüğü üzere kurduğumuz modeller arasında test verisi üzerinde en iyi performansa sahip model, mtry = 4 alarak kurduğumuz random forest modelidir.**
+
+
+#SORU 3
+
+```{r message=FALSE, warning=FALSE, include=FALSE}
+wines <- read.csv("C:/Users/DELL/Desktop/datamining_proje/Wine.csv")
+```
+
+Farklı şarap türlerini kümelemek için bir Şarap veri kümesi kullanacağız. Bu veri seti, İtalya'nın belirli bir bölgesinde yetiştirilen şarapların kimyasal analizinin sonuçlarını içerir. 14 değişkenli ve 178 gözlemden oluşur. 
+
+
+```{r message=TRUE, warning=TRUE}
+head(wines)
+summary(wines)
+```
+
+
+K-means, denetimsiz bir makine öğrenme algoritmasıdır ve etiketlenmemiş verilerle çalışır. Customer_Segment sütununa ihtiyacımız yok. 
+
+```{r message=FALSE, warning=FALSE}
+wines <- wines[, -14]
+```
+
+Şimdi veriyi görselleştirip daha yakından inceleyelim. 
+
+```{r message=FALSE, warning=FALSE}
+wines %>%
+  gather(Attributes, value, 1:13) %>%
+  ggplot(aes(x=value, fill=Attributes)) +
+  geom_histogram(colour="black", show.legend=FALSE) +
+  facet_wrap(~Attributes, scales="free_x") +
+  labs(x="Values", y="Frequency",
+       title="Wines Attributes - Histograms") +
+  theme_bw()
+```
+
+
+
+```{r message=FALSE, warning=FALSE}
+corrplot(cor(wines), type="upper", method="ellipse", tl.cex=0.9)
+
+```
+
+ Total_Phenols ve Flavanoids arasında güçlü bir doğrusal ilişki vardır. Doğrusal bir denklem yerleştirerek bu iki değişken arasındaki ilişkiyi modelleyebiliriz.
+
+```{r message=FALSE, warning=FALSE}
+ggplot(wines, aes(x=Total_Phenols, y=Flavanoids)) +
+  geom_point() +
+  geom_smooth(method="lm", se=FALSE) +
+  labs(title="Wines Attributes",
+       subtitle="Relationship between Phenols and Flavanoids") +
+  theme_bw()
+```
+
+
+
+
+Artık keşifsel bir veri analizi yaptığımıza göre, k-means algoritmasını yürütmek için verileri hazırlayabiliriz.
+
+
+# K-means
+
+Değişkenleri aynı değerler aralığında ifade etmek için normalize etmeliyiz.
+
+```{r message=FALSE, warning=FALSE}
+# Normalization
+winesNorm <- as.data.frame(scale(wines))
+
+# Original data
+p1 <- ggplot(wines, aes(x=Alcohol, y=Malic_Acid)) +
+  geom_point() +
+  labs(title="Original data") +
+  theme_bw()
+
+# Normalized data 
+p2 <- ggplot(winesNorm, aes(x=Alcohol, y=Malic_Acid)) +
+  geom_point() +
+  labs(title="Normalized data") +
+  theme_bw()
+
+# Subplot
+grid.arrange(p1, p2, ncol=2)
+```
+
+Normalleştirilmiş verilerdeki noktalar orijinal olanla aynıdır. Değişen tek şey eksenin ölçeğidir.
+
+Veri setimizde k-ortalama algoritmasını iki küme ile çalıştırabilir ve ona wines_k2 diyebiliriz.
+
+```{r message=FALSE, warning=FALSE}
+# k=2
+set.seed(1234)
+wines_k2 <- kmeans(winesNorm, centers=2)
+```
+
+
+**cluster : Her noktanın tahsis edildiği kümeyi gösteren bir tamsayı vektörü.**
+
+**centers : Küme merkezlerinin bir matrisi.**
+
+**size : Her kümedeki nokta sayısı.**
+
+
+```{r message=FALSE, warning=FALSE}
+#Her noktanın tahsis edildiği küme. 
+wines_k2$cluster
+```
+
+```{r message=FALSE, warning=FALSE}
+# küme merkezleri 
+wines_k2$centers
+
+```
+
+
+
+```{r}
+#her kümedeki nokta sayısı
+wines_k2$size
+```
+**betweenss : Küme arası karelerin toplamı. Optimal bir bölümlemede, heterojen kümelere sahip olmak istediğimiz için bu oranın olabildiğince yüksek olması beklenir. **
+
+**withinss : Küme başına bir bileşen olmak üzere, küme içi kareler toplamının vektörü. Optimal bir bölümlemede, bu oranın her bir küme için mümkün olduğu kadar düşük olması beklenir,çünkü kümeler içinde homojen olmak istiyoruz.** 
+
+**tot.withinss : Küme içi karelerin toplamı.**
+
+**totss : Toplam kareler toplamı.**
+
+
+```{r message=FALSE, warning=FALSE}
+# Küme arası kareler toplamı
+wines_k2$betweenss
+```
+
+
+```{r message=FALSE, warning=FALSE}
+# Küme içi kareler toplamı
+wines_k2$withinss
+```
+
+
+```{r message=FALSE, warning=FALSE}
+# Küme içi karelerin toplamı
+wines_k2$tot.withinss
+```
+
+```{r message=FALSE, warning=FALSE}
+# Toplam kareler toplamı
+wines_k2$totss
+```
+
+Optimal küme sayısını hesaplamak için Grup içi kareler toplamlarının toplamını (yani tot.withinss) kullanabiliriz.
+
+# ** Elbow Method**
+
+```{r message=FALSE, warning=FALSE}
+kmean_withinss <- function(k) {
+    cluster <- kmeans(winesNorm, k)
+    return (cluster$tot.withinss)
+}
+# Set maximum cluster 
+max_k <-20 
+set.seed(100)
+# Run algorithm over a range of k 
+wss <- sapply(2:max_k, kmean_withinss)
+
+```
+
+
+
+
+```{r message=FALSE, warning=FALSE}
+elbow <-data.frame(2:max_k, wss)
+
+```
+
+```{r message=FALSE, warning=FALSE}
+library(ggplot2)
+# Plot the graph with gglop
+ggplot(elbow, aes(x = X2.max_k, y = wss)) +
+    geom_point() +
+    geom_line() +
+    scale_x_continuous(breaks = seq(1, 20, by = 1))
+```
+Grafikten optimal k'nin üç olduğunu görebiliriz, burada k daki artışın etkisi azalmaya başlamıştır.
+
+
+
+# **Kümenin incelenmesi**
+```{r message=FALSE, warning=FALSE}
+wines_k2 <-kmeans(winesNorm, 3)
+wines_k2$cluster
+wines_k2$centers
+wines_k2$size
+```
+
+# Hierarchical kümeleme  
+
+Aynı veri ile çalışmaya devam edeceğiz. 
+
+
+```{r}
+wine <- read.csv("C:/Users/DELL/Desktop/datamining_proje/Wine.csv")
+```
+
+
+```{r}
+# farklı sütunlar farklı değer kümelerine sahip olduğundan ve 1. bağımlı sütun hariç tutulduğundan şarap veri kümesini standardize etme
+wine.stand=scale(wine[,-1])
+head(wine.stand)
+```
+
+
+hclust işlevi, varsayılan olarak hiyerarşik kümeleme için tam bağlantı yöntemini kullanır. Bu özel kümeleme yöntemi, iki küme arasındaki küme mesafesini, tek tek bileşenleri arasındaki maksimum mesafe olarak tanımlar.
+
+**euclidean, n boyutlu bir özellik uzayında bir çift p ve q örneği arasındaki bir mesafe ölçüsüdür.** 
+
+```{r message=FALSE, warning=FALSE}
+# şaraplar arasındaki mesafeyi bulmak 
+hc<-hclust(dist(wine.stand,method="euclidean"),method="ward.D2")
+hc
+```
+
+
+**dendrogram, hiyerarşik kümelemeyi - benzer veri kümeleri arasındaki ilişkileri - gösteren bir ağaç diyagramı türüdür.** 
+```{r message=FALSE, warning=FALSE}
+plot(hc,cex=0.7)
+
+```
+
+
+```{r message=FALSE, warning=FALSE}
+library(cluster)
+hc2<-hclust(dist(wine.stand,method="euclidean"),method="single")
+plot(hc2,cex=0.7)
+```
+
+Alternatif olarak, agnes fonksiyonunu da kullanabiliriz. Bu fonksiyon çok benzer şekilde davranır; ancak, agnes fonksiyonu ile, bulunan kümeleme yapısının gücünü ölçen aglomeratif katsayıyı da elde edebilir (1'e yakın değerler güçlü kümeleme yapısını gösterir).
+
+
+```{r message=FALSE, warning=FALSE}
+hc3<-agnes(dist(wine.stand,method="euclidean"), method = "single")
+pltree(hc3, cex = 0.6, main = "Dendrogram of agnes") 
+hc3$ac
+```
+
+
+Linkage methodları, tüm nesneler arasındaki mesafeleri veya benzerlikleri hesaplayarak çalışır. Ardından, en yakın küme çifti tek bir küme halinde birleştirilerek kalan küme sayısı azaltılır. İşlem daha sonra tek bir küme kalana kadar tekrarlanır. Linkage methodları karşılaştırmak için aglomeratif katsayıyı aşağıdaki gibi kullanabiliriz. 
+
+```{r message=FALSE, warning=FALSE}
+library(purrr)
+m <- c( "average", "single", "complete", "ward")
+names(m) <- c( "average", "single", "complete", "ward")
+ac <- function(x) {
+  agnes(dist(wine.stand,method="euclidean"), method = x)$ac
+}
+map_dbl(m, ac)
+```
+
+Bu, daha güçlü kümeleme yapılarını tanımlayabilen belirli hiyerarşik kümeleme yöntemlerini bulmamızı sağlar. Burada Ward yönteminin değerlendirilen dört yöntemin en güçlü kümeleme yapısını belirlediğini görüyoruz.
+
+
+# **Cutting Tree**
+
+```{r message=FALSE, warning=FALSE}
+sub_grp <- cutree(hc, k = 4)
+table(sub_grp)
+```
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+library(factoextra)
+fviz_cluster(list(data = wine.stand, cluster = sub_grp))
+```
+
+
+# **Optimal Küme Sayısını Belirleme**
+
+# **Elbow Method**
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+fviz_nbclust(wine.stand, FUN = hcut, method = "wss")
+```
+
+# **Average Silhouette Method**
+
+Siluet değeri, bir nesnenin diğer kümelere kıyasla kendi kümesine ne kadar benzediğinin bir ölçüsüdür.
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+fviz_nbclust(wine.stand, FUN = hcut, method = "silhouette")
+```
+
+
+# **Gap Statistic Method**
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+library(cluster)
+gap_stat <- clusGap(wine.stand, FUN = hcut, nstart = 25, K.max = 10, B = 50)
+fviz_gap_stat(gap_stat)
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
