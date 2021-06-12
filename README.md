@@ -34,6 +34,6 @@ We’re trying to predict wine quality, so we care about the final 2 columns/row
 - K-means clustering 
 - Hierarchical clustering  
 - Cutting Tree
-- Elbow method
+- Elbow Method
 - Average Silhouette Method
 - Gap Statistic Method
