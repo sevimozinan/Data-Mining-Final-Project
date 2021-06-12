@@ -2,9 +2,9 @@
 
 ![Imgur Image](https://imgur.com/uE9Rfuy.jpg)
 
-# Red Wine Quality
+# Synopsis - Red Wine Quality 
 
-In this analysis of the work, it will be determined which physiochemical properties make red wine 'good!' by using some machine learning techniques. Content of the paper is starting with introduction of the data set, and some data visualization. Then some classification and one regression technique will be applied to the data and with cross validation accuracy will be evaluated. Lastly, the best estimator will be decided according to cross validation score and conculusion.
+As the publisher of this dataset suggests; due to privacy and logistic issues, only physicochemical (inputs) and sensory (the output) variables are available (e.g. there is no data about grape types, wine brand, wine selling price, etc.). This specific dataset can be viewed as classification or a regression task. The classes are ordered and not balanced (e.g. there are much more normal wines than excellent or poor ones). As the publisher suggest, we will classify the wines by setting an arbitrary cutoff for our dependent variable (wine quality) at e.g. 7 or higher getting classified as ‘good/1’ and the remainder as ‘not good/0’. For this specific kernel we will be doing some basic data explorations and will be doing classification utilizing a quick random forest as our baseline model.
 
 # Data Introduction
 
@@ -12,7 +12,15 @@ In this dataset there are specifically red wine variants of Poteguese "Vinho Ver
 
 In the data set, there 1599 different wine as row data and 12 features as columns. Furthermore, there is no nun value to deal with it and all values are numeric means that input values are float and only output value is integer.
 
-# Chapters
+
+# Correlation Heatmap of Variables
+
+![Imgur Image](https://imgur.com/H6L1tYN.jpg)
+
+We’re trying to predict wine quality, so we care about the final 2 columns/rows in order to know which among the variables has the strongest relationship with wine quality. As the heatmap suggests, alcohol has the strongest correlation with wine quality.
+
+
+# Topics in this project
 
 - Classification Tree
 - Pruning
@@ -23,4 +31,20 @@ In the data set, there 1599 different wine as row data and 12 features as column
 - Optimum Cutoff
 - Receiver Operating Characteristic Curve (ROC)
 - Multicollinearity
+- K-means clustering 
+- Hierarchical clustering  
+- Cutting Tree
+- Elbow method
+- Average Silhouette Method
+- Gap Statistic Method
+
+
+
+
+
+
+
+
+
+
 
