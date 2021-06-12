@@ -1,6 +1,6 @@
 # Final Project - Data Mining 
 
-![Imgur Image](https://imgur.com/Kkhibxx.jpg)
+![Imgur Image](https://imgur.com/uE9Rfuy.jpg)
 
 # Red Wine Quality
 
